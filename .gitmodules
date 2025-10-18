@@ -1,18 +1,18 @@
 [submodule "services/insightric-auth-service"]
 	path = services/insightric-auth-service
-	url = ../insightric-auth-service.git
+	url = https://github.com/insightric/insightric-auth-service.git
 [submodule "services/insightric-upload-service"]
 	path = services/insightric-upload-service
-	url = ../insightric-upload-service.git
+	url = https://github.com/insightric/insightric-upload-service.git
 [submodule "services/insightric-processing-service"]
 	path = services/insightric-processing-service
-	url = ../insightric-processing-service.git
+	url = https://github.com/insightric/insightric-processing-service.git
 [submodule "services/insightric-ai-service"]
 	path = services/insightric-ai-service
-	url = ../insightric-ai-service.git
+	url = https://github.com/insightric/insightric-ai-service.git
 [submodule "services/insightric-insight-hub"]
 	path = services/insightric-insight-hub
-	url = ../insightric-insight-hub.git
+	url = https://github.com/insightric/insightric-insight-hub.git
 [submodule "services/insightric-notifier-service"]
 	path = services/insightric-notifier-service
-	url = ../insightric-notifier-service.git
+	url = https://github.com/insightric/insightric-notifier-service.git
