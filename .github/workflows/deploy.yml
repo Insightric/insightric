@@ -1,0 +1,114 @@
+name: Global Infrastructure and Deployment
+
+on:
+    workflow_dispatch:
+    push:
+        branches: ["dev", "main"]
+        paths:
+            - "infra/**"
+            - "services/**"
+            - ".github/workflows/**"
+    repository_dispatch:
+        types: ["deploy-service"]
+
+jobs:
+    # GLOBAL INFRASTRUCTURE & DEPLOYMENT JOB
+    infra-deploy:
+        runs-on: ubuntu-latest
+        if: ${{ github.event_name != 'repository_dispatch' }}
+
+        env:
+            AWS_REGION: us-east-1
+            ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'prod' || 'staging' }}
+
+        steps:
+            - name: Checkout Repository with Submodules
+              uses: actions/checkout@v4
+              with:
+                  submodules: true
+
+            - name: Configure AWS Credentials
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                  aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                  aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                  aws-region: ${{ env.AWS_REGION }}
+
+            - name: Initialize Terraform
+              run: |
+                  cd infra/terraform
+                  terraform init
+
+            - name: Terraform Apply
+              run: |
+                  cd infra/terraform
+                  terraform apply -auto-approve
+
+            - name: Fetch ECR Repositories
+              id: ecr
+              run: |
+                  cd infra/terraform
+                  terraform output -json ecr_repositories > ecr.json
+                  cat ecr.json
+
+            - name: Update Kubeconfig for EKS
+              run: |
+                  aws eks update-kubeconfig --region $AWS_REGION --name insightric-cluster
+
+            - name: Replace ECR URLs in manifests
+              run: |
+                  ECR_JSON="infra/terraform/ecr.json"
+                  echo "Injecting real ECR URLs into deployment manifests..."
+                  for service in $(jq -r 'keys[]' $ECR_JSON); do
+                      REPO=$(jq -r --arg s "$service" '.[$s]' $ECR_JSON)
+                      echo "Patching $service → $REPO"
+                      sed -i "s|{{IMAGE_PLACEHOLDER}}|$REPO:latest|g" infra/kubernetes/deployments/$service.yaml || true
+                  done
+
+            - name: Deploy to Kubernetes
+              run: |
+                  for file in infra/kubernetes/deployments/*.yaml; do
+                    kubectl apply -f "$file"
+                  done
+                  for file in infra/kubernetes/services/*.yaml; do
+                    kubectl apply -f "$file"
+                  done
+
+            - name: Verify Health Endpoints
+              run: |
+                  chmod +x scripts/check_health.sh
+                  ./scripts/check_health.sh
+
+    # LIGHTWEIGHT REDEPLOY JOB
+    deploy-service:
+        runs-on: ubuntu-latest
+        if: ${{ github.event_name == 'repository_dispatch' }}
+
+        env:
+            AWS_REGION: us-east-1
+
+        steps:
+            - name: Checkout Repository
+              uses: actions/checkout@v4
+              with:
+                  submodules: true
+
+            - name: Configure AWS Credentials
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                  aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                  aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                  aws-region: ${{ env.AWS_REGION }}
+
+            - name: Update Kubeconfig for EKS
+              run: aws eks update-kubeconfig --region $AWS_REGION --name insightric-cluster
+
+            - name: Update Kubernetes Deployment
+              run: |
+                  SERVICE_NAME="${{ github.event.client_payload.service }}"
+                  IMAGE="${{ github.event.client_payload.image }}"
+
+                  echo "Updating $SERVICE_NAME with image $IMAGE"
+
+                  kubectl set image deployment/$SERVICE_NAME \
+                      $SERVICE_NAME=$IMAGE --record
