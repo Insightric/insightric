@@ -10,7 +10,7 @@ services=(
 
 for svc in "${services[@]}"; do
   echo "Checking health for $svc..."
-  url="https://$svc.insightric.dev/health"
+  url="https://$svc.insightric.dev/api/health"
   if curl -s --fail "$url" > /dev/null; then
     echo "✅ $svc is healthy"
   else
