@@ -1,7 +1,8 @@
-# variable "region" {
-#   description = "AWS region"
-#   default = "us-east-1"
-# }
+variable "region" {
+  description = "AWS region for resources"
+  type        = string
+  default     = "us-east-1"
+}
 
 variable "environment" {
   description = "Deployment environment name"

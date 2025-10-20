@@ -19,7 +19,7 @@ resource "aws_ecr_repository" "services" {
 resource "aws_iam_role" "eks_cluster_role" {
   name = "insightric-eks-cluster-role"
 
-  assume_role_policy = jsondecode({
+  assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
         {
