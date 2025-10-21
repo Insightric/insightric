@@ -77,12 +77,12 @@ jobs:
             - name: Deploy to Kubernetes
               run: |
                   for file in infra/kubernetes/deployments/*.yaml; do
+                  cat "$file"
                     kubectl apply -f "$file"
-                    cat "$file"
                   done
                   for file in infra/kubernetes/services/*.yaml; do
+                  cat "$file"
                     kubectl apply -f "$file"
-                    cat "$file"
                   done
 
             - name: Verify Health Endpoints
