@@ -93,12 +93,16 @@ jobs:
             - name: Replace ECR URLs in manifests
               run: |
                   ECR_JSON="infra/terraform/ecr.json"
+                  cat $ECR_JSON
+                  cat "$ECR_JSON" | jq
+                  echo "ECR Repositories:"
+                  cat $ECR_JSON | jq
                   echo "Injecting real ECR URLs into deployment manifests..."
                   for service in $(cat $ECR_JSON | jq -r 'keys[]'); do
+                    echo infra/kubernetes/deployments/$service.yaml
                     echo "Patching $service → $REPO"
                     REPO=$(cat $ECR_JSON | jq -r --arg s "$service" '.[$s]')
                     echo "Replacing IMAGE_PLACEHOLDER with $REPO:latest"
-                    echo infra/kubernetes/deployments/$service.yaml
                     sed -i "s|IMAGE_PLACEHOLDER|$REPO:latest|g" infra/kubernetes/deployments/$service.yaml
                   done
 
