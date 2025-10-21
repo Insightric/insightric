@@ -56,57 +56,10 @@ jobs:
               id: ecr
               run: |
                   cd infra/terraform
-                  terraform output -json ecr_repositories > ecr.json
-              #   cat ecr.json
-
-            - name: Update Kubeconfig for EKS
-              run: |
-                  aws eks update-kubeconfig --region $AWS_REGION --name insightric-cluster
-
-            - name: Apply AWS Auth ConfigMap
-              env:
-                  NODE_ROLE_ARN: ${{ secrets.AWS_ROLE_TO_ASSUME_TERRAFORM }}
-                  GHA_ROLE_ARN: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-              run: |
-                  echo "Creating/updating aws-auth ConfigMap..."
-                  cat <<EOF > aws-auth.yaml
-                  apiVersion: v1
-                  kind: ConfigMap
-                  metadata:
-                    name: aws-auth
-                    namespace: kube-system
-                  data:
-                    mapRoles: |
-                      - rolearn: $NODE_ROLE_ARN
-                        username: system:node:{{EC2PrivateDNSName}}
-                        groups:
-                          - system:bootstrappers
-                          - system:nodes
-                      - rolearn: $GHA_ROLE_ARN
-                        username: github-actions
-                        groups:
-                          - system:masters
-                  EOF
-
-                  kubectl apply -f aws-auth.yaml
-
-            - name: Replace ECR URLs in manifests
-              run: |
-                  ECR_JSON="infra/terraform/ecr.json"
-                  echo "BEGIN ECR JSON CONTENT"
-                  cat $ECR_JSON
-                  echo "END ECR JSON CONTENT"
-                  echo "ECR Repositories:"
-                  jq . $ECR_JSON
-
-                  echo "Injecting real ECR URLs into deployment manifests..."
-                  for service in $(jq -r 'keys[]' $ECR_JSON); do
-                    echo infra/kubernetes/deployments/$service.yaml
-                    echo "Patching $service → $REPO"
-                    REPO=$(jq -r --arg s "$service" '.[$s]' $ECR_JSON)
-                    echo "Replacing IMAGE_PLACEHOLDER with $REPO:latest"
-                    sed -i "s|IMAGE_PLACEHOLDER|$REPO:latest|g" infra/kubernetes/deployments/$service.yaml
-                  done
+                  terraform output -json ecr_repositories 2>/dev/null | tail -n 1 > ecr.json
+                  echo "ECR JSON saved as:"
+                  cat ecr.json
+                  jq -e . infra/terraform/ecr.json
 
             - name: Deploy to Kubernetes
               run: |
