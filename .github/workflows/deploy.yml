@@ -67,6 +67,11 @@ jobs:
               run: |
                   ECR_JSON="infra/terraform/ecr.json"
                   cat $ECR_JSON
+                  if ! jq empty $ECR_JSON; then
+                    echo "Invalid JSON in $ECR_JSON"
+                    cat $ECR_JSON
+                    exit 1
+                  fi
                   echo "Injecting real ECR URLs into deployment manifests..."
                   for service in $(jq -r 'keys[]' $ECR_JSON); do
                       REPO=$(jq -r --arg s "$service" '.[$s]' $ECR_JSON)
