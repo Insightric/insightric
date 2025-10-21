@@ -99,7 +99,7 @@ jobs:
             - name: Configure AWS Credentials
               uses: aws-actions/configure-aws-credentials@v4
               with:
-                  role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME_TERRAFORM }}
+                  role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
                   aws-region: ${{ env.AWS_REGION }}
 
             - name: Update Kubeconfig for EKS
@@ -114,11 +114,8 @@ jobs:
 
                   echo "Updating $SERVICE_NAME with image $IMAGE"
 
-                  # Ensure kubeconfig is up to date and AWS credentials are used
-                  aws eks update-kubeconfig --region "$AWS_REGION" --name insightric-cluster
-
                   kubectl set image deployment/$SERVICE_NAME \
-                      $SERVICE_NAME=$IMAGE
+                      $SERVICE_NAME=$IMAGE --record
             - name: Verify Health Endpoints
               run: |
                   chmod +x scripts/check_health.sh
