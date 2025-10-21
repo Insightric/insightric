@@ -94,7 +94,6 @@ jobs:
               run: |
                   ECR_JSON="infra/terraform/ecr.json"
                   cat $ECR_JSON
-                  cat "$ECR_JSON" | jq
                   echo "ECR Repositories:"
                   cat $ECR_JSON | jq
                   echo "Injecting real ECR URLs into deployment manifests..."
