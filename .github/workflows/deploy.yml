@@ -56,7 +56,7 @@ jobs:
               id: ecr
               run: |
                   cd infra/terraform
-                  terraform output -json ecr_repositories > ecr.json
+                  terraform output -json ecr_repositories 2>/dev/null | awk '/^{/{print $0}' > ecr.json
               #   cat ecr.json
 
             - name: Update Kubeconfig for EKS
@@ -90,32 +90,31 @@ jobs:
 
                   kubectl apply -f aws-auth.yaml
 
-            - name: Update live deployments with ECR images
+            - name: Replace ECR URLs in manifests
               run: |
-                  set -euo pipefail
                   ECR_JSON="infra/terraform/ecr.json"
-                  echo "Updating live deployments based on $ECR_JSON..."
-                  if [ ! -f "$ECR_JSON" ]; then
-                    echo "$ECR_JSON not found"
-                    exit 1
-                  fi
+                  echo "BEGIN ECR JSON CONTENT"
+                  cat $ECR_JSON
+                  echo "END ECR JSON CONTENT"
+                  echo "ECR Repositories:"
+                  jq . $ECR_JSON
 
-                  for service in $(jq -r 'keys[]' "$ECR_JSON"); do
-                    repo=$(jq -r --arg s "$service" '.[$s]' "$ECR_JSON")
-                    image="${repo}:latest"
-                    echo "Updating deployment/$service → $image"
+                  echo "Injecting real ECR URLs into deployment manifests..."
+                  for service in $(jq -r 'keys[]' $ECR_JSON); do
+                    echo infra/kubernetes/deployments/$service.yaml
+                    echo "Patching $service → $REPO"
+                    REPO=$(jq -r --arg s "$service" '.[$s]' $ECR_JSON)
+                    echo "Replacing IMAGE_PLACEHOLDER with $REPO:latest"
+                    sed -i "s|IMAGE_PLACEHOLDER|$REPO:latest|g" infra/kubernetes/deployments/$service.yaml
+                  done
 
-                    # Skip if deployment doesn't exist
-                    if ! kubectl get deployment "$service" >/dev/null 2>&1; then
-                      echo "Deployment $service not found in cluster, skipping"
-                      continue
-                    fi
-
-                    # Update the container image (assumes container name == service name)
-                    kubectl set image "deployment/$service" "$service"="$image" --record
-
-                    # Wait for rollout to complete and fail if it doesn't
-                    kubectl rollout status "deployment/$service" --timeout=120s
+            - name: Deploy to Kubernetes
+              run: |
+                  for file in infra/kubernetes/deployments/*.yaml; do
+                    kubectl apply -f "$file"
+                  done
+                  for file in infra/kubernetes/services/*.yaml; do
+                    kubectl apply -f "$file"
                   done
 
     # LIGHTWEIGHT REDEPLOY JOB
