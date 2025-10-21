@@ -70,8 +70,9 @@ jobs:
                   fi
 
                   echo "Truncated JSON saved as:"
+                  echo "BEGIN"
                   cat ecr.json
-
+                  echo "END"
                   # Validate JSON
                   jq -e . ecr.json
 
