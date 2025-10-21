@@ -9,6 +9,8 @@ resource "aws_ecr_repository" "services" {
     scan_on_push = true
   }
 
+  force_delete = true
+
   tags = {
     Project     = "Insightric"
     Environment = var.environment
@@ -77,40 +79,6 @@ resource "aws_iam_role_policy_attachment" "ecr_readonly" {
   role       = aws_iam_role.eks_node_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
-# resource "kubernetes_config_map" "aws_auth" {
-#   depends_on = [
-#     aws_eks_cluster.insightric_cluster,
-#     aws_eks_node_group.default
-#   ]
-
-#   metadata {
-#     name      = "aws-auth"
-#     namespace = "kube-system"
-#   }
-
-#   data = {
-#     mapRoles = yamlencode([
-#       {
-#         rolearn  = aws_iam_role.eks_node_role.arn
-#         username = "system:node:{{EC2PrivateDNSName}}"
-#         groups = [
-#           "system:bootstrappers",
-#           "system:nodes"
-#         ]
-#       },
-#       {
-#         rolearn  = "arn:aws:iam::136086620476:role/insightric-gha-deployer"
-#         username = "github-actions"
-#         groups   = ["system:masters"]
-#       }
-#     ])
-#   }
-
-#   lifecycle {
-#     prevent_destroy = false
-#     ignore_changes  = [data]
-#   }
-# }
 
 # EKS Cluster
 resource "aws_eks_cluster" "insightric_cluster" {

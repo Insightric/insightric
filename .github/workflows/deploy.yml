@@ -63,6 +63,33 @@ jobs:
               run: |
                   aws eks update-kubeconfig --region $AWS_REGION --name insightric-cluster
 
+            - name: Apply AWS Auth ConfigMap
+              env:
+                  NODE_ROLE_ARN: ${{ secrets.AWS_ROLE_TO_ASSUME_TERRAFORM }}
+                  GHA_ROLE_ARN: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+              run: |
+                  echo "Creating/updating aws-auth ConfigMap..."
+                  cat <<EOF > aws-auth.yaml
+                  apiVersion: v1
+                  kind: ConfigMap
+                  metadata:
+                    name: aws-auth
+                    namespace: kube-system
+                  data:
+                    mapRoles: |
+                      - rolearn: $NODE_ROLE_ARN
+                        username: system:node:{{EC2PrivateDNSName}}
+                        groups:
+                          - system:bootstrappers
+                          - system:nodes
+                      - rolearn: $GHA_ROLE_ARN
+                        username: github-actions
+                        groups:
+                          - system:masters
+                  EOF
+
+                  kubectl apply -f aws-auth.yaml
+
             - name: Replace ECR URLs in manifests
               run: |
                   ECR_JSON="infra/terraform/ecr.json"
