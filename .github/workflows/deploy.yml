@@ -106,14 +106,19 @@ jobs:
               run: aws eks update-kubeconfig --region $AWS_REGION --name insightric-cluster
 
             - name: Update Kubernetes Deployment
+              env:
+                  AWS_REGION: ${{ env.AWS_REGION }}
               run: |
                   SERVICE_NAME="${{ github.event.client_payload.service }}"
                   IMAGE="${{ github.event.client_payload.image }}"
 
                   echo "Updating $SERVICE_NAME with image $IMAGE"
 
+                  # Ensure kubeconfig is up to date and AWS credentials are used
+                  aws eks update-kubeconfig --region "$AWS_REGION" --name insightric-cluster
+
                   kubectl set image deployment/$SERVICE_NAME \
-                      $SERVICE_NAME=$IMAGE --record
+                      $SERVICE_NAME=$IMAGE
             - name: Verify Health Endpoints
               run: |
                   chmod +x scripts/check_health.sh
