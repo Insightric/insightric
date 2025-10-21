@@ -6,27 +6,27 @@ variable "region" {
 
 variable "environment" {
   description = "Deployment environment name"
-  default = "dev"
+  default     = "dev"
 }
 
 variable "services" {
   description = "List of Insightric microservices to deploy"
-  type = list(string)
-  default = [ "insightric-auth-service" ]
+  type        = list(string)
+  default     = ["insightric-auth-service"]
 }
 
 variable "eks_cluster_name" {
   description = "Name of the EKS Cluster"
-  default = "insightric-cluster"
+  default     = "insightric-cluster"
 }
 
 variable "vpc_id" {
   description = "VPC ID for EKS Cluster"
-  default = null
+  default     = null
 }
 
 variable "subnet_ids" {
   description = "Subnet IDs for EKS worker nodes"
-  type = list(string)
-  default = [ "subnet-0802e366a04a676a7", "subnet-042e5f21f42497e22" ]
+  type        = list(string)
+  default     = ["subnet-0802e366a04a676a7", "subnet-042e5f21f42497e22"]
 }

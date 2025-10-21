@@ -1,0 +1,54 @@
+name: Terraform Destroy (Manual)
+
+on:
+    workflow_dispatch:
+        inputs:
+            confirm_destroy:
+                description: "Type 'yes' to confirm destruction of the Insightric infrastructure"
+                required: true
+                default: "no"
+
+permissions:
+    id-token: write
+    contents: read
+
+jobs:
+    terraform_destroy:
+        name: Destroy Infrastructure
+        runs-on: ubuntu-latest
+        if: ${{ github.event.inputs.confirm_destroy == 'yes' }}
+
+        env:
+            AWS_REGION: us-east-1
+            TF_IN_AUTOMATION: true
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Configure AWS credentials
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                  role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME_TERRAFORM }}
+                  aws-region: ${{ env.AWS_REGION }}
+
+            - name: Setup Terraform
+              uses: hashicorp/setup-terraform@v3
+              with:
+                  terraform_version: 1.13.4
+
+            - name: Initialize Terraform
+              working-directory: infra/terraform
+              run: terraform init -input=false
+
+            - name: Show Destroy Plan
+              working-directory: infra/terraform
+              run: terraform plan -destroy -out=tfplan -input=false
+
+            - name: Apply Destroy Plan
+              working-directory: infra/terraform
+              run: terraform apply -auto-approve tfplan
+
+            # Optional: delete state file in S3 after destroy
+            - name: Delete Terraform state file (optional)
+              run: aws s3 rm s3://insightric-terraform-state/infra/terraform.tfstate

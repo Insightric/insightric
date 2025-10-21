@@ -1,7 +1,8 @@
 # ECR Repositories
 resource "aws_ecr_repository" "services" {
   for_each = toset(var.services)
-  name     = each.value
+  name     = lower(replace(each.value, "_", "-"))
+
   image_tag_mutability = "MUTABLE"
 
   image_scanning_configuration {
@@ -37,6 +38,11 @@ resource "aws_iam_role_policy_attachment" "eks_cluster_policy" {
   role       = aws_iam_role.eks_cluster_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"
 }
+resource "aws_iam_role_policy_attachment" "eks_service_policy" {
+  role       = aws_iam_role.eks_cluster_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSServicePolicy"
+}
+
 
 # IAM Role for EKS Node Group (Worker Nodes)
 resource "aws_iam_role" "eks_node_role" {
@@ -71,6 +77,36 @@ resource "aws_iam_role_policy_attachment" "ecr_readonly" {
   role       = aws_iam_role.eks_node_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
+resource "kubernetes_config_map" "aws_auth" {
+  depends_on = [
+    aws_eks_cluster.insightric_cluster,
+    aws_eks_node_group.default
+  ]
+
+
+  metadata {
+    name      = "aws-auth"
+    namespace = "kube-system"
+  }
+
+  data = {
+    mapRoles = yamlencode([
+      {
+        rolearn  = aws_iam_role.eks_node_role.arn
+        username = "system:node:{{EC2PrivateDNSName}}"
+        groups = [
+          "system:bootstrappers",
+          "system:nodes"
+        ]
+      },
+      {
+        rolearn  = "arn:aws:iam::136086620476:role/insightric-gha-deployer"
+        username = "github-actions"
+        groups   = ["system:masters"]
+      }
+    ])
+  }
+}
 
 # EKS Cluster
 resource "aws_eks_cluster" "insightric_cluster" {
@@ -82,7 +118,8 @@ resource "aws_eks_cluster" "insightric_cluster" {
   }
 
   depends_on = [
-    aws_iam_role_policy_attachment.eks_cluster_policy
+    aws_iam_role_policy_attachment.eks_cluster_policy,
+    aws_iam_role_policy_attachment.eks_service_policy
   ]
 }
 
@@ -107,4 +144,24 @@ resource "aws_eks_node_group" "default" {
     aws_iam_role_policy_attachment.eks_cni_policy,
     aws_iam_role_policy_attachment.ecr_readonly
   ]
+}
+
+resource "aws_ecr_lifecycle_policy" "cleanup" {
+  for_each = aws_ecr_repository.services
+
+  repository = each.value.name
+  policy = jsonencode({
+    rules = [{
+      rulePriority = 1
+      description  = "Keep last 1 images"
+      selection = {
+        tagStatus   = "any"
+        countType   = "imageCountMoreThan"
+        countNumber = 1
+      }
+      action = {
+        type = "expire"
+      }
+    }]
+  })
 }
