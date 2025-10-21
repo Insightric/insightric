@@ -14,6 +14,31 @@ NAMESPACE="${NAMESPACE:-default}"
 RETRIES=3
 SLEEP=5
 
+echo "Displaying pods, services and deployments in namespace '$NAMESPACE'"
+
+{
+    echo "=== Pods (namespace: $NAMESPACE) ==="
+    kubectl get pods -n "$NAMESPACE" -o wide || true
+    echo
+
+    echo "=== Services (namespace: $NAMESPACE) ==="
+    kubectl get svc -n "$NAMESPACE" -o wide || true
+    echo
+
+    echo "=== Deployments (namespace: $NAMESPACE) ==="
+    kubectl get deployments -n "$NAMESPACE" -o wide || true
+    echo
+
+    echo "=== Pod descriptions (namespace: $NAMESPACE) ==="
+    for p in $(kubectl get pods -n "$NAMESPACE" -o name 2>/dev/null || true); do
+        echo "----- $p -----"
+        kubectl describe "$p" -n "$NAMESPACE" || true
+        echo
+    done
+
+    echo "=== End snapshot ==="
+}
+
 for svc in "${services[@]}"; do
   echo "Checking health for $svc..."
 
