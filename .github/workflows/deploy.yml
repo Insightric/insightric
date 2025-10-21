@@ -93,7 +93,9 @@ jobs:
             - name: Replace ECR URLs in manifests
               run: |
                   ECR_JSON="infra/terraform/ecr.json"
+                  echo "BEGIN ECR JSON CONTENT"
                   cat $ECR_JSON
+                  echo "END ECR JSON CONTENT"
                   echo "ECR Repositories:"
                   jq . $ECR_JSON
 
