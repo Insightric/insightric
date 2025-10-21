@@ -99,7 +99,7 @@ resource "aws_eks_node_group" "default" {
     min_size     = 1
   }
 
-  instance_types = ["t3.nano"]
+  instance_types = ["t3.micro"]
 
   depends_on = [
     aws_eks_cluster.insightric_cluster,
