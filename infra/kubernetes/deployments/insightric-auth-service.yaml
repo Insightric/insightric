@@ -11,17 +11,17 @@ spec:
     metadata:
       labels:
         app: insightric-auth-service
-  spec:
-    containers:
-      - name: insightric-auth-service
-        image: IMAGE_PLACEHOLDER
-        ports:
-          - containerPort: 3000
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 3000
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 3000
+    spec:
+      containers:
+        - name: insightric-auth-service
+          image: IMAGE_PLACEHOLDER
+          ports:
+            - containerPort: 3000
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000

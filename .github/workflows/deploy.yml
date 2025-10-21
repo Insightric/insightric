@@ -69,8 +69,8 @@ jobs:
                   cat $ECR_JSON
                   echo "Injecting real ECR URLs into deployment manifests..."
                   for service in $(cat $ECR_JSON | jq -r 'keys[]'); do
-                    REPO=$(cat $ECR_JSON | jq -r --arg s "$service" '.[$s]')
                     echo "Patching $service → $REPO"
+                    REPO=$(cat $ECR_JSON | jq -r --arg s "$service" '.[$s]')
                     sed -i "s|IMAGE_PLACEHOLDER|$REPO:latest|g" infra/kubernetes/deployments/$service.yaml
                   done
 
