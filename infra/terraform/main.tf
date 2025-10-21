@@ -83,7 +83,6 @@ resource "kubernetes_config_map" "aws_auth" {
     aws_eks_node_group.default
   ]
 
-
   metadata {
     name      = "aws-auth"
     namespace = "kube-system"
@@ -106,7 +105,13 @@ resource "kubernetes_config_map" "aws_auth" {
       }
     ])
   }
+
+  lifecycle {
+    prevent_destroy = false
+    ignore_changes  = [data]
+  }
 }
+
 
 # EKS Cluster
 resource "aws_eks_cluster" "insightric_cluster" {
