@@ -57,7 +57,7 @@ jobs:
               run: |
                   cd infra/terraform
                   terraform output -json ecr_repositories > ecr.json
-                  cat ecr.json
+              #   cat ecr.json
 
             - name: Update Kubeconfig for EKS
               run: |
@@ -66,7 +66,6 @@ jobs:
             - name: Replace ECR URLs in manifests
               run: |
                   ECR_JSON="infra/terraform/ecr.json"
-                  cat $ECR_JSON
                   echo "Injecting real ECR URLs into deployment manifests..."
                   for service in $(cat $ECR_JSON | jq -r 'keys[]'); do
                     echo "Patching $service → $REPO"
@@ -77,11 +76,9 @@ jobs:
             - name: Deploy to Kubernetes
               run: |
                   for file in infra/kubernetes/deployments/*.yaml; do
-                    cat "$file"
                     kubectl apply -f "$file"
                   done
                   for file in infra/kubernetes/services/*.yaml; do
-                    cat "$file"
                     kubectl apply -f "$file"
                   done
 
@@ -109,6 +106,8 @@ jobs:
               run: aws eks update-kubeconfig --region $AWS_REGION --name insightric-cluster
 
             - name: Update Kubernetes Deployment
+              env:
+                  AWS_REGION: ${{ env.AWS_REGION }}
               run: |
                   SERVICE_NAME="${{ github.event.client_payload.service }}"
                   IMAGE="${{ github.event.client_payload.image }}"
