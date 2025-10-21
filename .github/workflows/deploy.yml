@@ -67,26 +67,21 @@ jobs:
               run: |
                   ECR_JSON=$(terraform output -json ecr_repositories)
                   cat $ECR_JSON
-                  if ! jq empty $ECR_JSON; then
-                    echo "Invalid JSON in $ECR_JSON"
-                    cat $ECR_JSON
-                    exit 1
-                  fi
                   echo "Injecting real ECR URLs into deployment manifests..."
                   for service in $(echo $ECR_JSON | jq -r 'keys[]'); do
-                      REPO=$(echo $ECR_JSON | jq -r --arg s "$service" '.[$s]')
-                      echo "Patching $service → $REPO"
-                      sed -i "s|{{IMAGE_PLACEHOLDER}}|$REPO:latest|g" infra/kubernetes/deployments/$service.yaml || true
+                    REPO=$(echo $ECR_JSON | jq -r --arg s "$service" '.[$s]')
+                    echo "Patching $service → $REPO"
+                    sed -i "s|{{IMAGE_PLACEHOLDER}}|$REPO:latest|g" infra/kubernetes/deployments/$service.yaml || true
                   done
 
             - name: Deploy to Kubernetes
               run: |
                   for file in infra/kubernetes/deployments/*.yaml; do
-                  cat "$file"
+                    cat "$file"
                     kubectl apply -f "$file"
                   done
                   for file in infra/kubernetes/services/*.yaml; do
-                  cat "$file"
+                    cat "$file"
                     kubectl apply -f "$file"
                   done
 
