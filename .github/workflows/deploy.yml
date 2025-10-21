@@ -66,6 +66,7 @@ jobs:
             - name: Replace ECR URLs in manifests
               run: |
                   ECR_JSON="infra/terraform/ecr.json"
+                  cat $ECR_JSON
                   echo "Injecting real ECR URLs into deployment manifests..."
                   for service in $(jq -r 'keys[]' $ECR_JSON); do
                       REPO=$(jq -r --arg s "$service" '.[$s]' $ECR_JSON)
@@ -77,9 +78,11 @@ jobs:
               run: |
                   for file in infra/kubernetes/deployments/*.yaml; do
                     kubectl apply -f "$file"
+                    cat "$file"
                   done
                   for file in infra/kubernetes/services/*.yaml; do
                     kubectl apply -f "$file"
+                    cat "$file"
                   done
 
             - name: Verify Health Endpoints
