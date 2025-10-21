@@ -85,11 +85,6 @@ jobs:
                     kubectl apply -f "$file"
                   done
 
-            - name: Verify Health Endpoints
-              run: |
-                  chmod +x scripts/check_health.sh
-                  ./scripts/check_health.sh
-
     # LIGHTWEIGHT REDEPLOY JOB
     deploy-service:
         runs-on: ubuntu-latest
@@ -122,3 +117,7 @@ jobs:
 
                   kubectl set image deployment/$SERVICE_NAME \
                       $SERVICE_NAME=$IMAGE --record
+            - name: Verify Health Endpoints
+              run: |
+                  chmod +x scripts/check_health.sh
+                  ./scripts/check_health.sh
