@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: insightric-notifier-service
+  labels:
+    app: insightric-notifier-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: insightric-notifier-service
+  template:
+    metadata:
+      labels:
+        app: insightric-notifier-service
+    spec:
+      containers:
+        - name: insightric-notifier-service
+          image: ""
+          ports: []

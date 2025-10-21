@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: insightric-insight-hub
+  labels:
+    app: insightric-insight-hub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: insightric-insight-hub
+  template:
+    metadata:
+      labels:
+        app: insightric-insight-hub
+    spec:
+      containers:
+        - name: insightric-insight-hub
+          image: ""
+          ports: []
