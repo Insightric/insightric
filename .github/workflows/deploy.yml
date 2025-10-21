@@ -56,10 +56,24 @@ jobs:
               id: ecr
               run: |
                   cd infra/terraform
-                  terraform output -json ecr_repositories 2>/dev/null | tail -n 1 > ecr.json
-                  echo "ECR JSON saved as:"
+                  # Capture raw terraform output (may include terraform-bin prefix)
+                  terraform output -json ecr_repositories > ecr_raw.json 2>&1 || true
+                  echo "Raw terraform output:"
+                  sed -n '1,200p' ecr_raw.json
+
+                  # Extract JSON starting at the first "{" (handles prefix on its own line or same line)
+                  awk '/{/{flag=1} flag{print}' ecr_raw.json | sed 's/^[^{]*\(.*\)$/\1/' > ecr.json || true
+
+                  # Ensure jq is available before validating JSON
+                  if ! command -v jq >/dev/null 2>&1; then
+                    sudo apt-get update && sudo apt-get install -y jq
+                  fi
+
+                  echo "Truncated JSON saved as:"
                   cat ecr.json
-                  jq -e . infra/terraform/ecr.json
+
+                  # Validate JSON
+                  jq -e . ecr.json
 
             - name: Deploy to Kubernetes
               run: |
