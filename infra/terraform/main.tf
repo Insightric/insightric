@@ -9,6 +9,8 @@ resource "aws_ecr_repository" "services" {
     scan_on_push = true
   }
 
+  force_delete = true
+
   tags = {
     Project     = "Insightric"
     Environment = var.environment
