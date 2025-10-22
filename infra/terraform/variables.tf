@@ -25,8 +25,8 @@ variable "vpc_id" {
   default     = null
 }
 
-variable "subnet_ids" {
-  description = "Subnet IDs for EKS worker nodes"
-  type        = list(string)
-  default     = ["subnet-0802e366a04a676a7", "subnet-042e5f21f42497e22"]
-}
+# variable "subnet_ids" {
+#   description = "Subnet IDs for EKS worker nodes"
+#   type        = list(string)
+#   default     = ["subnet-0802e366a04a676a7", "subnet-042e5f21f42497e22"]
+# }
