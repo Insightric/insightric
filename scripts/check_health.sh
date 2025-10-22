@@ -19,15 +19,15 @@ echo "Displaying pods, services and deployments in namespace '$NAMESPACE'"
 {
     echo "=== Pods (namespace: $NAMESPACE) ==="
     kubectl get pods -n "$NAMESPACE" -o wide || true
-    echo \n\n
+    echo -e "\n\n"
 
     echo "=== Services (namespace: $NAMESPACE) ==="
     kubectl get svc -n "$NAMESPACE" -o wide || true
-    echo \n\n
+    echo -e "\n\n"
 
     echo "=== Deployments (namespace: $NAMESPACE) ==="
     kubectl get deployments -n "$NAMESPACE" -o wide || true
-    echo \n\n
+    echo -e "\n\n"
 
     echo "=== Pod descriptions (namespace: $NAMESPACE) ==="
     for p in $(kubectl get pods -n "$NAMESPACE" -o name 2>/dev/null || true); do
@@ -37,7 +37,7 @@ echo "Displaying pods, services and deployments in namespace '$NAMESPACE'"
     done
 
     echo "=== End snapshot ==="
-    echo \n\n
+    echo -e "\n\n"
 }
 
 for svc in "${services[@]}"; do
