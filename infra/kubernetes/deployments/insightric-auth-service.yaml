@@ -40,8 +40,8 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 3
-      tolerations:
-        - key: "node.kubernetes.io/unreachable"
-          operator: "Exists"
-          effect: "NoExecute"
-          tolerationSeconds: 300
+      # tolerations:
+      #   - key: "node.kubernetes.io/unreachable"
+      #     operator: "Exists"
+      #     effect: "NoExecute"
+      #     tolerationSeconds: 300
