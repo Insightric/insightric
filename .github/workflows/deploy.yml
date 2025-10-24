@@ -117,13 +117,6 @@ jobs:
             --docker-password=$(aws ecr get-login-password --region $AWS_REGION) \
             --namespace default \
             --dry-run=client -o yaml | kubectl apply -f -
-
-      - name: Patch Deployments to use Pull Secret
-        run: |
-          for file in infra/kubernetes/deployments/*.yaml; do
-            kubectl patch -f "$file" -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"ecr-pull-secret"}]}}}}'
-          done
-
       - name: Deploy to Kubernetes
         run: |
           for file in infra/kubernetes/deployments/*.yaml; do
@@ -131,6 +124,12 @@ jobs:
           done
           for file in infra/kubernetes/services/*.yaml; do
             kubectl apply -f "$file"
+          done
+
+      - name: Patch Deployments to use Pull Secret
+        run: |
+          for file in infra/kubernetes/deployments/*.yaml; do
+            kubectl patch -f "$file" -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"ecr-pull-secret"}]}}}}'
           done
       - name: Debug pods
         run: |
