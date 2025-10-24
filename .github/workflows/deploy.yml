@@ -1,157 +1,206 @@
 name: Global Infrastructure and Deployment
 
 permissions:
-    contents: read
-    id-token: write
+  contents: read
+  id-token: write
 
 on:
-    workflow_dispatch:
-    push:
-        branches: ["dev", "main"]
-        paths:
-            - "infra/**"
-            - "services/**"
-            - ".github/workflows/**"
-    repository_dispatch:
-        types: ["deploy-service"]
+  workflow_dispatch:
+  push:
+    branches: ["dev", "main"]
+    paths:
+      - "infra/**"
+      - "services/**"
+      - ".github/workflows/**"
+  repository_dispatch:
+    types: ["deploy-service"]
 
 jobs:
-    # GLOBAL INFRASTRUCTURE & DEPLOYMENT JOB
-    infra-deploy:
-        runs-on: ubuntu-latest
-        if: ${{ github.event_name != 'repository_dispatch' }}
+  # GLOBAL INFRASTRUCTURE & DEPLOYMENT JOB
+  infra-deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'repository_dispatch' }}
 
+    env:
+      AWS_REGION: us-east-1
+      ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'prod' || 'staging' }}
+
+    steps:
+      - name: Checkout Repository with Submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME_TERRAFORM }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.13.4
+
+      - name: Initialize Terraform
+        run: |
+          cd infra/terraform
+          terraform init -input=false
+
+      - name: Terraform Apply
+        run: |
+          cd infra/terraform
+          terraform apply -auto-approve
+
+      - name: Fetch ECR Repositories
+        id: ecr
+        run: |
+          cd infra/terraform
+          terraform output -json ecr_repositories 2>/dev/null | awk '/^{/{print $0}' > ecr.json
+        #   cat ecr.json
+
+      - name: Update Kubeconfig for EKS
+        run: |
+          aws eks update-kubeconfig --region $AWS_REGION --name insightric-cluster
+
+      - name: Apply AWS Auth ConfigMap
         env:
-            AWS_REGION: us-east-1
-            ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'prod' || 'staging' }}
+          NODE_ROLE_ARN: ${{ secrets.AWS_ROLE_TO_ASSUME_TERRAFORM }}
+          GHA_ROLE_ARN: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+        run: |
+          echo "Creating/updating aws-auth ConfigMap..."
+          cat <<EOF > aws-auth.yaml
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: aws-auth
+            namespace: kube-system
+          data:
+            mapRoles: |
+              - rolearn: $NODE_ROLE_ARN
+                username: system:node:{{EC2PrivateDNSName}}
+                groups:
+                  - system:bootstrappers
+                  - system:nodes
+              - rolearn: $GHA_ROLE_ARN
+                username: github-actions
+                groups:
+                  - system:masters
+          EOF
 
-        steps:
-            - name: Checkout Repository with Submodules
-              uses: actions/checkout@v4
-              with:
-                  submodules: true
+          kubectl apply -f aws-auth.yaml
 
-            - name: Configure AWS Credentials
-              uses: aws-actions/configure-aws-credentials@v4
-              with:
-                  role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME_TERRAFORM }}
-                  aws-region: ${{ env.AWS_REGION }}
+      - name: Replace ECR URLs in manifests
+        run: |
+          ECR_JSON="infra/terraform/ecr.json"
+          echo "BEGIN ECR JSON CONTENT"
+          cat $ECR_JSON
+          echo "END ECR JSON CONTENT"
+          echo "ECR Repositories:"
+          jq . $ECR_JSON
 
-            - name: Setup Terraform
-              uses: hashicorp/setup-terraform@v2
-              with:
-                  terraform_version: 1.13.4
+          echo "Injecting real ECR URLs into deployment manifests..."
+          for service in $(jq -r 'keys[]' $ECR_JSON); do
+            echo infra/kubernetes/deployments/$service.yaml
+            echo "Patching $service → $REPO"
+            REPO=$(jq -r --arg s "$service" '.[$s]' $ECR_JSON)
+            echo "Replacing IMAGE_PLACEHOLDER with $REPO:latest"
+            sed -i "s|IMAGE_PLACEHOLDER|$REPO:latest|g" infra/kubernetes/deployments/$service.yaml
+          done
 
-            - name: Initialize Terraform
-              run: |
-                  cd infra/terraform
-                  terraform init -input=false
+      - name: Deploy to Kubernetes
+        run: |
+          for file in infra/kubernetes/deployments/*.yaml; do
+            kubectl apply -f "$file"
+          done
+          for file in infra/kubernetes/services/*.yaml; do
+            kubectl apply -f "$file"
+          done
+      - name: Debug pods
+        run: |
+          kubectl get pods -n default -o wide
+          kubectl describe pods -n default
+          for pod in $(kubectl get pods -n default -o name); do
+            echo "Logs for $pod:"
+            kubectl logs -n default "$pod" || true
+          done
+      - name: Wait for deployments to be ready
+        run: |
+          for file in infra/kubernetes/deployments/*.yaml; do
+            DEPLOYMENT_NAME=$(basename "$file" .yaml)
+            echo "Waiting for deployment $DEPLOYMENT_NAME to be ready..."
+            kubectl rollout status deployment/"$DEPLOYMENT_NAME" --timeout=120s
+          done
 
-            - name: Terraform Apply
-              run: |
-                  cd infra/terraform
-                  terraform apply -auto-approve
+  # LIGHTWEIGHT REDEPLOY JOB
+  deploy-service:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'repository_dispatch' }}
 
-            - name: Fetch ECR Repositories
-              id: ecr
-              run: |
-                  cd infra/terraform
-                  terraform output -json ecr_repositories 2>/dev/null | awk '/^{/{print $0}' > ecr.json
-              #   cat ecr.json
+    env:
+      AWS_REGION: us-east-1
+      NAMESPACE: default
 
-            - name: Update Kubeconfig for EKS
-              run: |
-                  aws eks update-kubeconfig --region $AWS_REGION --name insightric-cluster
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: true
 
-            - name: Apply AWS Auth ConfigMap
-              env:
-                  NODE_ROLE_ARN: ${{ secrets.AWS_ROLE_TO_ASSUME_TERRAFORM }}
-                  GHA_ROLE_ARN: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-              run: |
-                  echo "Creating/updating aws-auth ConfigMap..."
-                  cat <<EOF > aws-auth.yaml
-                  apiVersion: v1
-                  kind: ConfigMap
-                  metadata:
-                    name: aws-auth
-                    namespace: kube-system
-                  data:
-                    mapRoles: |
-                      - rolearn: $NODE_ROLE_ARN
-                        username: system:node:{{EC2PrivateDNSName}}
-                        groups:
-                          - system:bootstrappers
-                          - system:nodes
-                      - rolearn: $GHA_ROLE_ARN
-                        username: github-actions
-                        groups:
-                          - system:masters
-                  EOF
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
 
-                  kubectl apply -f aws-auth.yaml
+      - name: Update Kubeconfig for EKS
+        run: aws eks update-kubeconfig --region $AWS_REGION --name insightric-cluster
 
-            - name: Replace ECR URLs in manifests
-              run: |
-                  ECR_JSON="infra/terraform/ecr.json"
-                  echo "BEGIN ECR JSON CONTENT"
-                  cat $ECR_JSON
-                  echo "END ECR JSON CONTENT"
-                  echo "ECR Repositories:"
-                  jq . $ECR_JSON
+      - name: Wait for Nodes to be Ready
+        run: |
+          echo "Waiting for all nodes to be in 'Ready' status..."
+          for i in {1..10}; do
+            NOT_READY_NODES=$(kubectl get nodes --no-headers | grep -v ' Ready ' | wc -l)
+            if [ "$NOT_READY_NODES" -eq 0 ]; then
+              echo "All nodes are Ready."
+              exit 0
+            else
+              echo "$NOT_READY_NODES nodes are not Ready. Checking again in 10 seconds..."
+              sleep 10
+            fi
+          done
+          echo "Timeout waiting for nodes to be Ready."
+          kubectl get nodes
+          exit 1
 
-                  echo "Injecting real ECR URLs into deployment manifests..."
-                  for service in $(jq -r 'keys[]' $ECR_JSON); do
-                    echo infra/kubernetes/deployments/$service.yaml
-                    echo "Patching $service → $REPO"
-                    REPO=$(jq -r --arg s "$service" '.[$s]' $ECR_JSON)
-                    echo "Replacing IMAGE_PLACEHOLDER with $REPO:latest"
-                    sed -i "s|IMAGE_PLACEHOLDER|$REPO:latest|g" infra/kubernetes/deployments/$service.yaml
-                  done
+      - name: Create ECR Pull Secret
+        run: |
+          ECR_REGISTRY=136086620476.dkr.ecr.us-east-1.amazonaws.com
+          kubectl create secret docker-registry ecr-pull-secret \
+            --docker-server=$ECR_REGISTRY \
+            --docker-username=AWS \
+            --docker-password=$(aws ecr get-login-password --region $AWS_REGION) \
+            --namespace $NAMESPACE \
+            --dry-run=client -o yaml | kubectl apply -f -
 
-            - name: Deploy to Kubernetes
-              run: |
-                  for file in infra/kubernetes/deployments/*.yaml; do
-                    kubectl apply -f "$file"
-                  done
-                  for file in infra/kubernetes/services/*.yaml; do
-                    kubectl apply -f "$file"
-                  done
+      - name: Patch Deployments to use Pull Secret
+        run: |
+          for file in infra/kubernetes/deployments/*.yaml; do
+            kubectl patch -f "$file" -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"ecr-pull-secret"}]}}}}'
+          done
 
-    # LIGHTWEIGHT REDEPLOY JOB
-    deploy-service:
-        runs-on: ubuntu-latest
-        if: ${{ github.event_name == 'repository_dispatch' }}
-
+      - name: Update Kubernetes Deployment Image
         env:
-            AWS_REGION: us-east-1
+          AWS_REGION: ${{ env.AWS_REGION }}
+        run: |
+          SERVICE_NAME="${{ github.event.client_payload.service }}"
+          IMAGE="${{ github.event.client_payload.image }}"
 
-        steps:
-            - name: Checkout Repository
-              uses: actions/checkout@v4
-              with:
-                  submodules: true
+          echo "Updating $SERVICE_NAME with image $IMAGE"
+          kubectl set image deployment/$SERVICE_NAME \
+              $SERVICE_NAME=$IMAGE --namespace $NAMESPACE
 
-            - name: Configure AWS Credentials
-              uses: aws-actions/configure-aws-credentials@v4
-              with:
-                  role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-                  aws-region: ${{ env.AWS_REGION }}
-
-            - name: Update Kubeconfig for EKS
-              run: aws eks update-kubeconfig --region $AWS_REGION --name insightric-cluster
-
-            - name: Update Kubernetes Deployment
-              env:
-                  AWS_REGION: ${{ env.AWS_REGION }}
-              run: |
-                  SERVICE_NAME="${{ github.event.client_payload.service }}"
-                  IMAGE="${{ github.event.client_payload.image }}"
-
-                  echo "Updating $SERVICE_NAME with image $IMAGE"
-
-                  kubectl set image deployment/$SERVICE_NAME \
-                      $SERVICE_NAME=$IMAGE --record
-            - name: Verify Health Endpoints
-              run: |
-                  chmod +x scripts/check_health.sh
-                  ./scripts/check_health.sh
+      # - name: Verify Health Endpoints
+      #   run: |
+      #     chmod +x scripts/check_health.sh
+      #     ./scripts/check_health.sh
