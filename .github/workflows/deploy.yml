@@ -144,7 +144,7 @@ jobs:
           for file in infra/kubernetes/deployments/*.yaml; do
             DEPLOYMENT_NAME=$(basename "$file" .yaml)
             echo "Waiting for deployment $DEPLOYMENT_NAME to be ready..."
-            kubectl rollout status deployment/"$DEPLOYMENT_NAME" --timeout=120s
+            kubectl rollout status deployment/"$DEPLOYMENT_NAME" --timeout=300s
           done
 
   # LIGHTWEIGHT REDEPLOY JOB
