@@ -1,5 +1,10 @@
 name: Global Infrastructure and Deployment
 
+run-name: >
+  ${{ github.event_name == 'repository_dispatch' &&
+      format('Deploying {0}', github.event.client_payload.display_name || github.event.client_payload.service) ||
+      format('Infra Deploy - {0}', github.ref_name) }}
+
 permissions:
   contents: read
   id-token: write
