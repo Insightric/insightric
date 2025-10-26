@@ -90,77 +90,25 @@ jobs:
 
           kubectl apply -f aws-auth.yaml
 
-      - name: Replace ECR URLs in manifests
-        run: |
-          ECR_JSON="infra/terraform/ecr.json"
-          echo "BEGIN ECR JSON CONTENT"
-          cat $ECR_JSON
-          echo "END ECR JSON CONTENT"
-          echo "ECR Repositories:"
-          jq . $ECR_JSON
-
-          echo "Injecting real ECR URLs into deployment manifests..."
-          for service in $(jq -r 'keys[]' $ECR_JSON); do
-            echo infra/kubernetes/deployments/$service.yaml
-            echo "Patching $service → $REPO"
-            REPO=$(jq -r --arg s "$service" '.[$s]' $ECR_JSON)
-            echo "Replacing IMAGE_PLACEHOLDER with $REPO:latest"
-            sed -i "s|IMAGE_PLACEHOLDER|$REPO:latest|g" infra/kubernetes/deployments/$service.yaml
-          done
-
-      - name: Create ECR Pull Secret
-        run: |
-          ECR_REGISTRY=136086620476.dkr.ecr.us-east-1.amazonaws.com
-          kubectl create secret docker-registry ecr-pull-secret \
-            --docker-server=$ECR_REGISTRY \
-            --docker-username=AWS \
-            --docker-password=$(aws ecr get-login-password --region $AWS_REGION) \
-            --namespace default \
-            --dry-run=client -o yaml | kubectl apply -f -
-      - name: Deploy to Kubernetes
-        run: |
-          for file in infra/kubernetes/deployments/*.yaml; do
-            kubectl apply -f "$file"
-          done
-          for file in infra/kubernetes/services/*.yaml; do
-            kubectl apply -f "$file"
-          done
-
-      - name: Patch Deployments to use Pull Secret
-        run: |
-          for file in infra/kubernetes/deployments/*.yaml; do
-            kubectl patch -f "$file" -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"ecr-pull-secret"}]}}}}'
-          done
-      - name: Debug pods
-        run: |
-          kubectl get pods -n default -o wide
-          kubectl describe pods -n default
-          for pod in $(kubectl get pods -n default -o name); do
-            echo "Logs for $pod:"
-            kubectl logs -n default "$pod" || true
-          done
-      - name: Wait for deployments to be ready
-        run: |
-          for file in infra/kubernetes/deployments/*.yaml; do
-            DEPLOYMENT_NAME=$(basename "$file" .yaml)
-            echo "Waiting for deployment $DEPLOYMENT_NAME to be ready..."
-            kubectl rollout status deployment/"$DEPLOYMENT_NAME" --timeout=300s
-          done
-
   # LIGHTWEIGHT REDEPLOY JOB
   deploy-service:
+    name: Deploying ${{ github.event.client_payload.display_name || github.event.client_payload.name || github.event.client_payload.service }}
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'repository_dispatch' }}
 
     env:
       AWS_REGION: us-east-1
       NAMESPACE: default
+      IMAGE: ${{ github.event.client_payload.image }}
+      SERVICE: ${{ github.event.client_payload.service }}
+      REF: ${{ github.event.client_payload.ref || 'dev' }}
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout Repository (branch from dispatcher)
         uses: actions/checkout@v4
         with:
           submodules: true
+          ref: ${{ env.REF }}
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -170,23 +118,6 @@ jobs:
 
       - name: Update Kubeconfig for EKS
         run: aws eks update-kubeconfig --region $AWS_REGION --name insightric-cluster
-
-      - name: Wait for Nodes to be Ready
-        run: |
-          echo "Waiting for all nodes to be in 'Ready' status..."
-          for i in {1..10}; do
-            NOT_READY_NODES=$(kubectl get nodes --no-headers | grep -v ' Ready ' | wc -l)
-            if [ "$NOT_READY_NODES" -eq 0 ]; then
-              echo "All nodes are Ready."
-              exit 0
-            else
-              echo "$NOT_READY_NODES nodes are not Ready. Checking again in 10 seconds..."
-              sleep 10
-            fi
-          done
-          echo "Timeout waiting for nodes to be Ready."
-          kubectl get nodes
-          exit 1
 
       - name: Create ECR Pull Secret
         run: |
@@ -198,24 +129,33 @@ jobs:
             --namespace $NAMESPACE \
             --dry-run=client -o yaml | kubectl apply -f -
 
+      - name: Deploy or Update Kubernetes Resources
+        run: |
+          kubectl apply -f infra/kubernetes/deployments/$SERVICE.yaml --namespace $NAMESPACE
+          kubectl apply -f infra/kubernetes/services/$SERVICE.yaml --namespace $NAMESPACE
+
       - name: Patch Deployments to use Pull Secret
         run: |
-          for file in infra/kubernetes/deployments/*.yaml; do
-            kubectl patch -f "$file" -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"ecr-pull-secret"}]}}}}'
-          done
+          kubectl patch -f infra/kubernetes/deployments/$SERVICE.yaml -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"ecr-pull-secret"}]}}}}' --namespace $NAMESPACE
 
       - name: Update Kubernetes Deployment Image
         env:
           AWS_REGION: ${{ env.AWS_REGION }}
         run: |
-          SERVICE_NAME="${{ github.event.client_payload.service }}"
-          IMAGE="${{ github.event.client_payload.image }}"
+          echo "Updating $SERVICE with image $IMAGE"
+          kubectl set image deployment/$SERVICE \
+              $SERVICE=$IMAGE --namespace $NAMESPACE
 
-          echo "Updating $SERVICE_NAME with image $IMAGE"
-          kubectl set image deployment/$SERVICE_NAME \
-              $SERVICE_NAME=$IMAGE --namespace $NAMESPACE
+      - name: Wait for Deployment Rollout
+        run: |
+          kubectl rollout status deployment/$SERVICE --namespace $NAMESPACE --timeout=300s
 
-      # - name: Verify Health Endpoints
-      #   run: |
-      #     chmod +x scripts/check_health.sh
-      #     ./scripts/check_health.sh
+      - name: Debug pods
+        run: |
+          kubectl get nodes -o wide
+          kubectl get pods -n default -o wide
+          kubectl describe pods -n default
+          for pod in $(kubectl get pods -n default -o name); do
+            echo "Logs for $pod:"
+            kubectl logs -n default "$pod" || true
+          done
