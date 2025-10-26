@@ -135,7 +135,7 @@ resource "aws_eks_cluster" "insightric_cluster" {
   role_arn = aws_iam_role.eks_cluster_role.arn
 
   vpc_config {
-    subnet_ids = module.vpc.private_subnets
+    subnet_ids              = module.vpc.private_subnets
     endpoint_private_access = true
     endpoint_public_access  = true
   }
@@ -154,8 +154,8 @@ resource "aws_eks_node_group" "default" {
   subnet_ids      = module.vpc.private_subnets
 
   scaling_config {
-    desired_size = 2
-    max_size     = 3
+    desired_size = 1
+    max_size     = 1
     min_size     = 1
   }
 

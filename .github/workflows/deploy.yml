@@ -108,6 +108,15 @@ jobs:
             sed -i "s|IMAGE_PLACEHOLDER|$REPO:latest|g" infra/kubernetes/deployments/$service.yaml
           done
 
+      - name: Create ECR Pull Secret
+        run: |
+          ECR_REGISTRY=136086620476.dkr.ecr.us-east-1.amazonaws.com
+          kubectl create secret docker-registry ecr-pull-secret \
+            --docker-server=$ECR_REGISTRY \
+            --docker-username=AWS \
+            --docker-password=$(aws ecr get-login-password --region $AWS_REGION) \
+            --namespace default \
+            --dry-run=client -o yaml | kubectl apply -f -
       - name: Deploy to Kubernetes
         run: |
           for file in infra/kubernetes/deployments/*.yaml; do
@@ -115,6 +124,12 @@ jobs:
           done
           for file in infra/kubernetes/services/*.yaml; do
             kubectl apply -f "$file"
+          done
+
+      - name: Patch Deployments to use Pull Secret
+        run: |
+          for file in infra/kubernetes/deployments/*.yaml; do
+            kubectl patch -f "$file" -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"ecr-pull-secret"}]}}}}'
           done
       - name: Debug pods
         run: |
@@ -129,7 +144,7 @@ jobs:
           for file in infra/kubernetes/deployments/*.yaml; do
             DEPLOYMENT_NAME=$(basename "$file" .yaml)
             echo "Waiting for deployment $DEPLOYMENT_NAME to be ready..."
-            kubectl rollout status deployment/"$DEPLOYMENT_NAME" --timeout=120s
+            kubectl rollout status deployment/"$DEPLOYMENT_NAME" --timeout=300s
           done
 
   # LIGHTWEIGHT REDEPLOY JOB
