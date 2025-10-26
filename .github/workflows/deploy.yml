@@ -97,7 +97,7 @@ jobs:
 
   # LIGHTWEIGHT REDEPLOY JOB
   deploy-service:
-    name: Deploying ${{ github.event.client_payload.display_name || github.event.client_payload.name || github.event.client_payload.service }}
+    # name: Deploying ${{ github.event.client_payload.display_name || github.event.client_payload.name || github.event.client_payload.service }}
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'repository_dispatch' }}
 
