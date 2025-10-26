@@ -1,5 +1,10 @@
 name: Global Infrastructure and Deployment
 
+run-name: >
+  ${{ github.event_name == 'repository_dispatch' &&
+      format('Deploying {0}', github.event.client_payload.display_name || github.event.client_payload.service) ||
+      format('Infra Deploy - {0}', github.ref_name) }}
+
 permissions:
   contents: read
   id-token: write
@@ -92,7 +97,7 @@ jobs:
 
   # LIGHTWEIGHT REDEPLOY JOB
   deploy-service:
-    name: Deploying ${{ github.event.client_payload.display_name || github.event.client_payload.name || github.event.client_payload.service }}
+    # name: Deploying ${{ github.event.client_payload.display_name || github.event.client_payload.name || github.event.client_payload.service }}
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'repository_dispatch' }}
 
@@ -145,6 +150,16 @@ jobs:
           echo "Updating $SERVICE with image $IMAGE"
           kubectl set image deployment/$SERVICE \
               $SERVICE=$IMAGE --namespace $NAMESPACE
+
+      - name: Debug pods
+        run: |
+          kubectl get nodes -o wide
+          kubectl get pods -n default -o wide
+          kubectl describe pods -n default
+          for pod in $(kubectl get pods -n default -o name); do
+            echo "Logs for $pod:"
+            kubectl logs -n default "$pod" || true
+          done
 
       - name: Wait for Deployment Rollout
         run: |
