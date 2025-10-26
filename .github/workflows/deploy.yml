@@ -92,6 +92,7 @@ jobs:
 
   # LIGHTWEIGHT REDEPLOY JOB
   deploy-service:
+    name: Deploying ${{ github.event.client_payload.display_name || github.event.client_payload.name || github.event.client_payload.service }}
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'repository_dispatch' }}
 
@@ -100,12 +101,14 @@ jobs:
       NAMESPACE: default
       IMAGE: ${{ github.event.client_payload.image }}
       SERVICE: ${{ github.event.client_payload.service }}
+      REF: ${{ github.event.client_payload.ref || 'dev' }}
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout Repository (branch from dispatcher)
         uses: actions/checkout@v4
         with:
           submodules: true
+          ref: ${{ env.REF }}
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
