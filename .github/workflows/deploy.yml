@@ -72,6 +72,8 @@ jobs:
         env:
           NODE_ROLE_ARN: ${{ secrets.AWS_ROLE_TO_ASSUME_TERRAFORM }}
           GHA_ROLE_ARN: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          ADMIN_ARN: ${{ secrets.AWS_ADMIN_ARN }}
+          ADMIN_USERNAME: ${{ secrets.AWS_ADMIN_USERNAME }}
         run: |
           echo "Creating/updating aws-auth ConfigMap..."
           cat <<EOF > aws-auth.yaml
@@ -89,6 +91,11 @@ jobs:
                   - system:nodes
               - rolearn: $GHA_ROLE_ARN
                 username: github-actions
+                groups:
+                  - system:masters
+            mapUsers: |
+              - userarn: $ADMIN_ARN
+                username: $ADMIN_USERNAME
                 groups:
                   - system:masters
           EOF
